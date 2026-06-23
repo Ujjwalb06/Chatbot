@@ -1,0 +1,242 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+.usersPage {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at top, #1a1530 0%, #0a0a14 55%, #050507 100%);
+  overflow: hidden;
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  color: #ededf2;
+}
+
+.bgGlow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.glowOne { width: 500px; height: 500px; background: #6e6ff5; top: -150px; left: -100px; }
+.glowTwo { width: 450px; height: 450px; background: #d36fd6; bottom: -150px; right: -100px; }
+
+.usersContainer {
+  position: relative;
+  z-index: 1;
+  padding: 28px 3%;
+}
+
+.usersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6e6ff5, #d36fd6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.usersHeader h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.backBtn {
+  padding: 9px 18px;
+  background: rgba(255,255,255,0.05);
+  color: #c0c0ff;
+  border: 1px solid rgba(160,160,255,0.25);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.backBtn:hover { background: rgba(160,160,255,0.1); }
+
+.toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.toast.success { background: rgba(90,200,120,0.15); color: #90ee90; border: 1px solid rgba(90,200,120,0.3); }
+.toast.error { background: rgba(220,80,100,0.15); color: #f0a0ae; border: 1px solid rgba(220,80,100,0.3); }
+
+.usersTableWrapper {
+  background: rgba(255,255,255,0.035);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.usersTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.usersTable th {
+  text-align: left;
+  padding: 16px 20px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #9494a0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.usersTable td {
+  padding: 16px 20px;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.usersTable tr:last-child td { border-bottom: none; }
+.usersTable tr:hover td { background: rgba(255,255,255,0.02); }
+
+.roleBadge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.roleBadge.admin {
+  background: rgba(138,92,240,0.15);
+  color: #b89bff;
+  border: 1px solid rgba(138,92,240,0.3);
+}
+
+.roleBadge.user {
+  background: rgba(255,255,255,0.06);
+  color: #c0c0ca;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.editBtn, .deleteBtn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  margin-right: 8px;
+}
+
+.editBtn {
+  background: rgba(110,111,245,0.15);
+  color: #a0a0ff;
+  border: 1px solid rgba(110,111,245,0.3);
+}
+
+.editBtn:hover { background: rgba(110,111,245,0.25); }
+
+.deleteBtn {
+  background: rgba(220,80,100,0.1);
+  color: #f0a0ae;
+  border: 1px solid rgba(220,80,100,0.25);
+}
+
+.deleteBtn:hover { background: rgba(220,80,100,0.2); }
+
+.modalOverlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.modalBox {
+  background: #14141c;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px;
+  padding: 28px;
+  width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.modalBox h3 {
+  font-size: 17px;
+  margin-bottom: 18px;
+  color: #f5f5f7;
+}
+
+.modalBox label {
+  font-size: 12px;
+  color: #9494a0;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.modalBox input, .modalBox select {
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: #ededf2;
+  font-size: 14px;
+  outline: none;
+}
+
+.modalBox input:focus, .modalBox select:focus {
+  border-color: #8a5cf0;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cancelBtn, .saveBtn {
+  flex: 1;
+  padding: 11px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13.5px;
+  border: none;
+}
+
+.cancelBtn {
+  background: rgba(255,255,255,0.05);
+  color: #b0b0ba;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.cancelBtn:hover { background: rgba(255,255,255,0.08); }
+
+.saveBtn {
+  background: linear-gradient(135deg, #5b5cf0, #8a5cf0);
+  color: white;
+}
+
+.saveBtn:hover { opacity: 0.9; }
