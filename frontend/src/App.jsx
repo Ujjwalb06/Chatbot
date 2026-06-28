@@ -4,15 +4,19 @@ import ReactMarkdown from "react-markdown";
 import "./App.css";
 
 function App() {
+  const [sessions, setSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
   const chatboxRef = useRef(null);
 
   useEffect(() => {
-    checkLogin();
+    init();
   }, []);
 
   useEffect(() => {
@@ -21,13 +25,17 @@ function App() {
     }
   }, [messages, isTyping]);
 
+  function getToken() {
+    return localStorage.getItem("token");
+  }
+
   function getTime() {
     let now = new Date();
     return now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
   }
 
-  function checkLogin() {
-    let token = localStorage.getItem("token");
+  async function init() {
+    let token = getToken();
     let user = localStorage.getItem("username");
     let userRole = localStorage.getItem("role");
 
@@ -38,34 +46,130 @@ function App() {
 
     setUsername(user);
     setRole(userRole);
-    loadHistory(user, token);
-}
+    await loadSessions();
+  }
 
-async function loadHistory(user, token) {
+  async function loadSessions() {
     try {
-        let res = await fetch("/api/history", {
-            headers: { Authorization: "Bearer " + token },
-        });
+      let res = await fetch("/api/sessions", {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
 
-        if (!res.ok) throw new Error("Failed to load history");
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        return;
+      }
 
-        let data = await res.json();
+      let data = await res.json();
+      setSessions(data);
 
-        if (data.length === 0) {
-            setMessages([{ role: "bot", content: `Hi ${user}! How can I help you today?`, time: getTime() }]);
-        } else {
-            let formatted = data.map((m) => ({
-                role: m.role === "user" ? "user" : "bot",
-                content: m.content,
-                time: new Date(m.timestamp).getHours().toString().padStart(2, "0") + ":" +
-                      new Date(m.timestamp).getMinutes().toString().padStart(2, "0"),
-            }));
-            setMessages(formatted);
-        }
+      if (data.length === 0) {
+        await createNewChat();
+      } else {
+        selectSession(data[0].id);
+      }
     } catch (err) {
-        setMessages([{ role: "bot", content: `Hi ${user}! How can I help you today?`, time: getTime() }]);
+      console.error(err);
     }
-}
+  }
+
+  async function createNewChat() {
+    try {
+      let res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+      let newSession = await res.json();
+
+      setSessions((prev) => [newSession, ...prev]);
+      setCurrentSessionId(newSession.id);
+      setMessages([{ role: "bot", content: `Hi ${username}! How can I help you today?`, time: getTime() }]);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function selectSession(id) {
+    setCurrentSessionId(id);
+
+    try {
+      let res = await fetch(`/api/sessions/${id}/messages`, {
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+      let data = await res.json();
+
+      if (data.length === 0) {
+        setMessages([{ role: "bot", content: `Hi ${username}! How can I help you today?`, time: getTime() }]);
+      } else {
+        let formatted = data.map((m) => ({
+          role: m.role === "user" ? "user" : "bot",
+          content: m.content,
+          time: new Date(m.timestamp).getHours().toString().padStart(2, "0") + ":" +
+                new Date(m.timestamp).getMinutes().toString().padStart(2, "0"),
+        }));
+        setMessages(formatted);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function deleteSession(id, e) {
+    e.stopPropagation();
+    if (!window.confirm("Delete this chat? This cannot be undone.")) return;
+
+    try {
+      await fetch(`/api/sessions/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: "Bearer " + getToken() },
+      });
+
+      let updated = sessions.filter((s) => s.id !== id);
+      setSessions(updated);
+
+      if (id === currentSessionId) {
+        if (updated.length > 0) {
+          selectSession(updated[0].id);
+        } else {
+          await createNewChat();
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function startRename(session, e) {
+    e.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditTitle(session.title);
+  }
+
+  async function saveRename(id) {
+    if (!editTitle.trim()) {
+      setEditingSessionId(null);
+      return;
+    }
+
+    try {
+      await fetch(`/api/sessions/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + getToken(),
+        },
+        body: JSON.stringify({ title: editTitle }),
+      });
+
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, title: editTitle } : s))
+      );
+    } catch (err) {
+      console.error(err);
+    }
+
+    setEditingSessionId(null);
+  }
 
   function logout() {
     localStorage.removeItem("token");
@@ -76,7 +180,7 @@ async function loadHistory(user, token) {
   }
 
   async function ask() {
-    if (!question.trim()) return;
+    if (!question.trim() || !currentSessionId) return;
 
     let q = question.trim();
     let newMessages = [...messages, { role: "user", content: q, time: getTime() }];
@@ -85,15 +189,14 @@ async function loadHistory(user, token) {
     setIsTyping(true);
 
     try {
-      let token = localStorage.getItem("token");
-
       let res = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer " + token,   // ✅ attach JWT
+          Authorization: "Bearer " + getToken(),
         },
         body: JSON.stringify({
+          sessionId: currentSessionId,
           messages: newMessages.map((m) => ({
             role: m.role === "user" ? "user" : "assistant",
             content: m.content,
@@ -102,14 +205,19 @@ async function loadHistory(user, token) {
       });
 
       if (res.status === 401 || res.status === 403) {
-        logout(); // token invalid/expired
+        logout();
         return;
       }
 
       if (!res.ok) throw new Error("Server error");
 
-      let text = await res.text();
-      setMessages([...newMessages, { role: "bot", content: text, time: getTime() }]);
+      let data = await res.json();
+      setMessages([...newMessages, { role: "bot", content: data.answer, time: getTime() }]);
+
+      // Update session title in sidebar if it was auto-renamed
+      setSessions((prev) =>
+        prev.map((s) => (s.id === currentSessionId ? { ...s, title: data.sessionTitle } : s))
+      );
     } catch (err) {
       setMessages([
         ...newMessages,
@@ -123,21 +231,6 @@ async function loadHistory(user, token) {
   function handleKey(e) {
     if (e.key === "Enter") ask();
   }
-
-  async function clearChat() {
-    let token = localStorage.getItem("token");
-
-    try {
-        await fetch("/api/history", {
-            method: "DELETE",
-            headers: { Authorization: "Bearer " + token },
-        });
-    } catch (err) {
-        console.error("Failed to clear history on server");
-    }
-
-    setMessages([{ role: "bot", content: `Hi ${username}! How can I help you today?`, time: getTime() }]);
-}
 
   function copyMessage(text, index) {
     navigator.clipboard.writeText(text);
@@ -153,107 +246,154 @@ async function loadHistory(user, token) {
       <div className="bgGlow glowOne"></div>
       <div className="bgGlow glowTwo"></div>
 
-      <div className="app">
+      <div className="layout">
+        {/* Sidebar */}
         <motion.div
-          className="header"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          className="sidebar"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
         >
-          <div className="brand">
-            <div className="logo">AI</div>
-            <div>
-              <h2>Assistant</h2>
-              <span className="username">Signed in as {username} {role === "ADMIN" && "(Admin)"}</span>
-            </div>
+          <button className="newChatBtn" onClick={createNewChat}>
+            + New Chat
+          </button>
+
+          <div className="sessionList">
+            <AnimatePresence>
+              {sessions.map((s) => (
+                <motion.div
+                  key={s.id}
+                  className={`sessionItem ${s.id === currentSessionId ? "active" : ""}`}
+                  onClick={() => selectSession(s.id)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {editingSessionId === s.id ? (
+                    <input
+                      className="renameInput"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onBlur={() => saveRename(s.id)}
+                      onKeyDown={(e) => e.key === "Enter" && saveRename(s.id)}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="sessionTitle">{s.title}</span>
+                  )}
+
+                  <div className="sessionActions">
+                    <button className="iconBtn" onClick={(e) => startRename(s, e)} title="Rename">
+                      ✎
+                    </button>
+                    <button className="iconBtn delete" onClick={(e) => deleteSession(s.id, e)} title="Delete">
+                      🗑
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
+
+          <div className="sidebarFooter">
+            <button className="sidebarBtn" onClick={() => (window.location.href = "/profile.html")}>
+              Profile
+            </button>
             {role === "ADMIN" && (
-              <button className="logoutBtn" onClick={() => (window.location.href = "/users.html")}>
+              <button className="sidebarBtn" onClick={() => (window.location.href = "/users.html")}>
                 Manage Users
               </button>
             )}
-            <button className="logoutBtn" onClick={logout}>Logout</button>
+            <button className="sidebarBtn logout" onClick={logout}>
+              Logout
+            </button>
           </div>
         </motion.div>
 
-        <div className="chatbox" ref={chatboxRef}>
-          <AnimatePresence initial={false}>
-            {messages.map((m, i) => (
-              <motion.div
-                key={i}
-                className={`messageRow ${m.role}`}
-                initial={{ opacity: 0, y: 14, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-              >
-                {m.role === "bot" && <div className="avatar bot-avatar">AI</div>}
+        {/* Main chat area */}
+        <div className="app">
+          <motion.div
+            className="header"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div className="brand">
+              <div className="logo">AI</div>
+              <div>
+                <h2>Assistant</h2>
+                <span className="username">Signed in as {username}</span>
+              </div>
+            </div>
+          </motion.div>
 
-                <div className={`message ${m.role} ${m.error ? "error" : ""}`}>
-                  <div className="messageText">
-                    {m.role === "bot" ? (
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
-                    ) : (
-                      m.content
-                    )}
+          <div className="chatbox" ref={chatboxRef}>
+            <AnimatePresence initial={false}>
+              {messages.map((m, i) => (
+                <motion.div
+                  key={i}
+                  className={`messageRow ${m.role}`}
+                  initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                >
+                  {m.role === "bot" && <div className="avatar bot-avatar">AI</div>}
+
+                  <div className={`message ${m.role} ${m.error ? "error" : ""}`}>
+                    <div className="messageText">
+                      {m.role === "bot" ? <ReactMarkdown>{m.content}</ReactMarkdown> : m.content}
+                    </div>
+                    <div className="messageFooter">
+                      <span className="time">{m.time}</span>
+                      {m.role === "bot" && !m.error && (
+                        <button id={`copy-${i}`} className="copyBtn" onClick={() => copyMessage(m.content, i)}>
+                          Copy
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="messageFooter">
-                    <span className="time">{m.time}</span>
-                    {m.role === "bot" && !m.error && (
-                      <button
-                        id={`copy-${i}`}
-                        className="copyBtn"
-                        onClick={() => copyMessage(m.content, i)}
-                      >
-                        Copy
-                      </button>
-                    )}
+
+                  {m.role === "user" && (
+                    <div className="avatar user-avatar">{username.charAt(0).toUpperCase()}</div>
+                  )}
+                </motion.div>
+              ))}
+
+              {isTyping && (
+                <motion.div
+                  className="messageRow bot"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <div className="avatar bot-avatar">AI</div>
+                  <div className="message bot typingBubble">
+                    <span className="dot"></span>
+                    <span className="dot"></span>
+                    <span className="dot"></span>
                   </div>
-                </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-                {m.role === "user" && (
-                  <div className="avatar user-avatar">{username.charAt(0).toUpperCase()}</div>
-                )}
-              </motion.div>
-            ))}
-
-            {isTyping && (
-              <motion.div
-                className="messageRow bot"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-              >
-                <div className="avatar bot-avatar">AI</div>
-                <div className="message bot typingBubble">
-                  <span className="dot"></span>
-                  <span className="dot"></span>
-                  <span className="dot"></span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <motion.div
+            className="inputBox"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+          >
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Message Assistant..."
+            />
+            <button className="sendBtn" onClick={ask} disabled={!question.trim()}>
+              Send
+            </button>
+          </motion.div>
         </div>
-
-        <motion.div
-          className="inputBox"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Message Assistant..."
-          />
-          <button className="sendBtn" onClick={ask} disabled={!question.trim()}>
-            Send
-          </button>
-          <button className="clearBtn" onClick={clearChat}>
-            Clear
-          </button>
-        </motion.div>
       </div>
     </div>
   );

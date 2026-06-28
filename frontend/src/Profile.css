@@ -1,0 +1,169 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+.profilePage {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at top, #1a1530 0%, #0a0a14 55%, #050507 100%);
+  overflow: hidden;
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  color: #ededf2;
+}
+
+.bgGlow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.glowOne { width: 500px; height: 500px; background: #6e6ff5; top: -150px; left: -100px; }
+.glowTwo { width: 450px; height: 450px; background: #d36fd6; bottom: -150px; right: -100px; }
+
+.profileContainer {
+  position: relative;
+  z-index: 1;
+  padding: 28px 5%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.profileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6e6ff5, #d36fd6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.profileHeader h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.backBtn {
+  padding: 9px 18px;
+  background: rgba(255,255,255,0.05);
+  color: #c0c0ff;
+  border: 1px solid rgba(160,160,255,0.25);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.backBtn:hover { background: rgba(160,160,255,0.1); }
+
+.profileGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .profileGrid { grid-template-columns: 1fr; }
+}
+
+.profileCard {
+  background: rgba(255,255,255,0.035);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.avatarLarge {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6e6ff5, #d36fd6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 16px;
+}
+
+.profileCard h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #f5f5f7;
+}
+
+.profileCard label {
+  font-size: 12px;
+  color: #9494a0;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.profileCard input {
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  color: #ededf2;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+
+.profileCard input:focus {
+  border-color: #8a5cf0;
+}
+
+.disabledInput {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saveBtn {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #5b5cf0, #8a5cf0);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 6px;
+  box-shadow: 0 6px 20px rgba(110,111,245,0.35);
+  transition: transform 0.15s;
+}
+
+.saveBtn:hover { transform: scale(1.02); }
+
+.profileMsg {
+  margin-top: 14px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.profileMsg.success { color: #90ee90; }
+.profileMsg.error { color: #ff6b6b; }

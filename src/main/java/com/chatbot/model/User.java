@@ -25,6 +25,19 @@ public class User {
     @Column(nullable = false)
     private String role = "USER";   // USER or ADMIN
 
+    @Column
+    private String resetToken;
+
+    @Column
+    private Long resetTokenExpiry;
+
+    // getters and setters
+    public String getResetToken() { return resetToken; }
+    public void setResetToken(String resetToken) { this.resetToken = resetToken; }
+
+    public Long getResetTokenExpiry() { return resetTokenExpiry; }
+    public void setResetTokenExpiry(Long resetTokenExpiry) { this.resetTokenExpiry = resetTokenExpiry; }
+
     public User() {}
 
     public User(String name, String email, String username, String password) {

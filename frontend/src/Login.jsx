@@ -82,9 +82,11 @@ function Login() {
         </button>
 
         {msg && <div className={`authMsg ${msgType}`}>{msg}</div>}
-
         <p className="switchLink">
-          Don't have an account? <a href="/register.html">Register</a>
+         Don't have an account? <a href="/register.html">Register</a>
+        </p>
+        <p className="switchLink">
+         <a href="/forgot-password.html">Forgot Password?</a>
         </p>
       </motion.div>
     </div>

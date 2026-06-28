@@ -30,7 +30,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/login.html", "/register.html", "/index.html", "/users.html", "/").permitAll()
+                .requestMatchers("/login.html", "/register.html", "/index.html", "/users.html", "/profile.html", "/forgot-password.html", "/reset-password.html", "/").permitAll()
                 .requestMatchers("/assets/**", "/*.svg", "/*.png", "/*.ico").permitAll()
                 .requestMatchers("/api/users/**").hasRole("ADMIN")
                 .anyRequest().authenticated()

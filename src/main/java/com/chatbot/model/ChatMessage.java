@@ -12,10 +12,13 @@ public class ChatMessage {
     private Long id;
 
     @Column(nullable = false)
-    private String username;   // links message to user
+    private Long sessionId;   // ✅ links message to a chat session
 
     @Column(nullable = false)
-    private String role;       // "user" or "assistant"
+    private String username;
+
+    @Column(nullable = false)
+    private String role;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
@@ -25,7 +28,8 @@ public class ChatMessage {
 
     public ChatMessage() {}
 
-    public ChatMessage(String username, String role, String content) {
+    public ChatMessage(Long sessionId, String username, String role, String content) {
+        this.sessionId = sessionId;
         this.username = username;
         this.role = role;
         this.content = content;
@@ -33,6 +37,7 @@ public class ChatMessage {
     }
 
     public Long getId() { return id; }
+    public Long getSessionId() { return sessionId; }
     public String getUsername() { return username; }
     public String getRole() { return role; }
     public String getContent() { return content; }
