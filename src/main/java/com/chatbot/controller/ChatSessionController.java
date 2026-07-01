@@ -4,6 +4,7 @@ import com.chatbot.model.ChatMessage;
 import com.chatbot.model.ChatSession;
 import com.chatbot.repository.ChatMessageRepository;
 import com.chatbot.repository.ChatSessionRepository;
+import com.chatbot.util.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -11,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/sessions")
@@ -23,50 +23,39 @@ public class ChatSessionController {
     @Autowired
     private ChatMessageRepository chatMessageRepository;
 
-    // ✅ Get all sessions for logged-in user (sidebar list)
     @GetMapping
     public List<ChatSession> getSessions(Authentication authentication) {
-        String username = authentication.getName();
-        return chatSessionRepository.findByUsernameOrderByCreatedAtDesc(username);
+        return chatSessionRepository.findByUsernameOrderByCreatedAtDesc(authentication.getName());
     }
 
-    // ✅ Create a new chat session
     @PostMapping
     public ChatSession createSession(Authentication authentication) {
-        String username = authentication.getName();
-        ChatSession session = new ChatSession(username, "New Chat");
-        return chatSessionRepository.save(session);
+        return chatSessionRepository.save(new ChatSession(authentication.getName(), "New Chat"));
     }
 
-    // ✅ Get messages for a specific session
     @GetMapping("/{id}/messages")
     public List<ChatMessage> getMessages(@PathVariable Long id, Authentication authentication) {
-        String username = authentication.getName();
-        Optional<ChatSession> session = chatSessionRepository.findByIdAndUsername(id, username);
-
-        if (session.isEmpty()) return List.of();
+        // ✅ Throws RuntimeException (caught by GlobalExceptionHandler) if not found
+        chatSessionRepository.findByIdAndUsername(id, authentication.getName())
+                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
 
         return chatMessageRepository.findBySessionIdOrderByTimestampAsc(id);
     }
 
-    // ✅ Rename a session
     @PutMapping("/{id}")
     public Map<String, Object> renameSession(@PathVariable Long id,
                                               @RequestBody Map<String, String> body,
                                               Authentication authentication) {
-        String username = authentication.getName();
         Map<String, Object> response = new HashMap<>();
 
-        Optional<ChatSession> sessionOpt = chatSessionRepository.findByIdAndUsername(id, username);
+        // ✅ Validate title not blank
+        String title = body.get("title");
+        Validator.requireNonBlank(title, "Session title");
 
-        if (sessionOpt.isEmpty()) {
-            response.put("success", false);
-            response.put("message", "Session not found");
-            return response;
-        }
+        ChatSession session = chatSessionRepository.findByIdAndUsername(id, authentication.getName())
+                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
 
-        ChatSession session = sessionOpt.get();
-        session.setTitle(body.get("title"));
+        session.setTitle(title.trim());
         chatSessionRepository.save(session);
 
         response.put("success", true);
@@ -74,23 +63,15 @@ public class ChatSessionController {
         return response;
     }
 
-    // ✅ Delete a session and its messages
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteSession(@PathVariable Long id, Authentication authentication) {
-        String username = authentication.getName();
-        Map<String, Object> response = new HashMap<>();
-
-        Optional<ChatSession> sessionOpt = chatSessionRepository.findByIdAndUsername(id, username);
-
-        if (sessionOpt.isEmpty()) {
-            response.put("success", false);
-            response.put("message", "Session not found");
-            return response;
-        }
+        chatSessionRepository.findByIdAndUsername(id, authentication.getName())
+                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
 
         chatMessageRepository.deleteBySessionId(id);
         chatSessionRepository.deleteById(id);
 
+        Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("message", "Session deleted successfully!");
         return response;

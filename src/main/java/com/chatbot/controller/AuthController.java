@@ -3,6 +3,7 @@ package com.chatbot.controller;
 import com.chatbot.model.User;
 import com.chatbot.repository.UserRepository;
 import com.chatbot.util.JwtUtil;
+import com.chatbot.util.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -25,24 +26,42 @@ public class AuthController {
     private JwtUtil jwtUtil;
 
     @PostMapping("/register")
-    public ResponseEntityWrapper register(@RequestBody User user) {
+    public Map<String, Object> register(@RequestBody User user) {
+        Map<String, Object> response = new HashMap<>();
+
+        // ✅ Validate all fields before touching the DB
+        Validator.requireNonBlank(user.getName(), "Name");
+        Validator.validateEmail(user.getEmail());
+        Validator.validateUsername(user.getUsername());
+        Validator.validatePassword(user.getPassword());
+
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            return new ResponseEntityWrapper("Username already exists!", false);
+            response.put("success", false);
+            response.put("message", "Username already exists!");
+            return response;
         }
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-            return new ResponseEntityWrapper("Email already registered!", false);
+            response.put("success", false);
+            response.put("message", "Email already registered!");
+            return response;
         }
 
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRole("USER");  // default role
+        user.setRole("USER");
         userRepository.save(user);
 
-        return new ResponseEntityWrapper("Registered successfully!", true);
+        response.put("success", true);
+        response.put("message", "Registered successfully!");
+        return response;
     }
 
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody User user) {
         Map<String, Object> response = new HashMap<>();
+
+        // ✅ Validate inputs before hitting DB
+        Validator.requireNonBlank(user.getUsername(), "Username");
+        Validator.requireNonBlank(user.getPassword(), "Password");
 
         Optional<User> existing = userRepository.findByUsername(user.getUsername());
 
@@ -59,20 +78,9 @@ public class AuthController {
             response.put("role", u.getRole());
         } else {
             response.put("success", false);
-            response.put("message", "Invalid credentials!");
+            response.put("message", "Invalid username or password.");
         }
 
         return response;
-    }
-
-    // simple wrapper class for register response
-    static class ResponseEntityWrapper {
-        public String message;
-        public boolean success;
-
-        public ResponseEntityWrapper(String message, boolean success) {
-            this.message = message;
-            this.success = success;
-        }
     }
 }
