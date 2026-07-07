@@ -4,6 +4,7 @@ import com.chatbot.model.ChatMessage;
 import com.chatbot.model.ChatSession;
 import com.chatbot.repository.ChatMessageRepository;
 import com.chatbot.repository.ChatSessionRepository;
+import com.chatbot.repository.DocumentChunkRepository;
 import com.chatbot.util.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
@@ -23,6 +24,9 @@ public class ChatSessionController {
     @Autowired
     private ChatMessageRepository chatMessageRepository;
 
+    @Autowired
+    private DocumentChunkRepository documentChunkRepository;
+
     @GetMapping
     public List<ChatSession> getSessions(Authentication authentication) {
         return chatSessionRepository.findByUsernameOrderByCreatedAtDesc(authentication.getName());
@@ -35,10 +39,8 @@ public class ChatSessionController {
 
     @GetMapping("/{id}/messages")
     public List<ChatMessage> getMessages(@PathVariable Long id, Authentication authentication) {
-        // ✅ Throws RuntimeException (caught by GlobalExceptionHandler) if not found
         chatSessionRepository.findByIdAndUsername(id, authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
-
         return chatMessageRepository.findBySessionIdOrderByTimestampAsc(id);
     }
 
@@ -47,8 +49,6 @@ public class ChatSessionController {
                                               @RequestBody Map<String, String> body,
                                               Authentication authentication) {
         Map<String, Object> response = new HashMap<>();
-
-        // ✅ Validate title not blank
         String title = body.get("title");
         Validator.requireNonBlank(title, "Session title");
 
@@ -68,7 +68,9 @@ public class ChatSessionController {
         chatSessionRepository.findByIdAndUsername(id, authentication.getName())
                 .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
 
+        // ✅ Delete messages, document chunks, then the session itself
         chatMessageRepository.deleteBySessionId(id);
+        documentChunkRepository.deleteBySessionId(id);   // ← new line
         chatSessionRepository.deleteById(id);
 
         Map<String, Object> response = new HashMap<>();
