@@ -2,11 +2,8 @@ package com.chatbot.controller;
 
 import com.chatbot.model.ChatMessage;
 import com.chatbot.model.ChatSession;
-import com.chatbot.repository.ChatMessageRepository;
-import com.chatbot.repository.ChatSessionRepository;
-import com.chatbot.repository.DocumentChunkRepository;
-import com.chatbot.util.Validator;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.chatbot.service.ChatService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,62 +13,44 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/sessions")
+@RequiredArgsConstructor
 public class ChatSessionController {
 
-    @Autowired
-    private ChatSessionRepository chatSessionRepository;
-
-    @Autowired
-    private ChatMessageRepository chatMessageRepository;
-
-    @Autowired
-    private DocumentChunkRepository documentChunkRepository;
+    // ✅ SOLID: Controller delegates to ChatService — no direct repo calls
+    private final ChatService chatService;
 
     @GetMapping
-    public List<ChatSession> getSessions(Authentication authentication) {
-        return chatSessionRepository.findByUsernameOrderByCreatedAtDesc(authentication.getName());
+    public List<ChatSession> getSessions(Authentication auth) {
+        return chatService.getSessions(auth.getName());
     }
 
     @PostMapping
-    public ChatSession createSession(Authentication authentication) {
-        return chatSessionRepository.save(new ChatSession(authentication.getName(), "New Chat"));
+    public ChatSession createSession(Authentication auth) {
+        return chatService.createSession(auth.getName());
     }
 
     @GetMapping("/{id}/messages")
-    public List<ChatMessage> getMessages(@PathVariable Long id, Authentication authentication) {
-        chatSessionRepository.findByIdAndUsername(id, authentication.getName())
-                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
-        return chatMessageRepository.findBySessionIdOrderByTimestampAsc(id);
+    public List<ChatMessage> getMessages(@PathVariable Long id, Authentication auth) {
+        return chatService.getMessages(id, auth.getName());
     }
 
     @PutMapping("/{id}")
-    public Map<String, Object> renameSession(@PathVariable Long id,
-                                              @RequestBody Map<String, String> body,
-                                              Authentication authentication) {
+    public Map<String, Object> renameSession(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            Authentication auth) {
+
+        chatService.renameSession(id, auth.getName(), body.get("title"));
+
         Map<String, Object> response = new HashMap<>();
-        String title = body.get("title");
-        Validator.requireNonBlank(title, "Session title");
-
-        ChatSession session = chatSessionRepository.findByIdAndUsername(id, authentication.getName())
-                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
-
-        session.setTitle(title.trim());
-        chatSessionRepository.save(session);
-
         response.put("success", true);
         response.put("message", "Renamed successfully!");
         return response;
     }
 
     @DeleteMapping("/{id}")
-    public Map<String, Object> deleteSession(@PathVariable Long id, Authentication authentication) {
-        chatSessionRepository.findByIdAndUsername(id, authentication.getName())
-                .orElseThrow(() -> new RuntimeException("Session not found or access denied."));
-
-        // ✅ Delete messages, document chunks, then the session itself
-        chatMessageRepository.deleteBySessionId(id);
-        documentChunkRepository.deleteBySessionId(id);   // ← new line
-        chatSessionRepository.deleteById(id);
+    public Map<String, Object> deleteSession(@PathVariable Long id, Authentication auth) {
+        chatService.deleteSession(id, auth.getName());
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);

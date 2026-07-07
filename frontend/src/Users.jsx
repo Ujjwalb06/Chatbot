@@ -75,8 +75,8 @@ function Users() {
         body: JSON.stringify(editingUser),
       });
 
-      let text = await res.text();
-      showMsg(text, text.includes("success") ? "success" : "error");
+      let data = await res.json();
+      showMsg(data.message, data.success ? "success" : "error");
       setEditingUser(null);
       loadUsers();
     } catch (err) {
@@ -93,8 +93,8 @@ function Users() {
         headers: { Authorization: "Bearer " + getToken() },
       });
 
-      let text = await res.text();
-      showMsg(text, text.includes("success") ? "success" : "error");
+      let data = await res.json();
+      showMsg(data.message, data.success ? "success" : "error");
       loadUsers();
     } catch (err) {
       showMsg("Failed to delete user", "error");

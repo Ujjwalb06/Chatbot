@@ -1,35 +1,36 @@
 package com.chatbot.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class EmailService {
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
 
-    // Reads from spring.mail.username in application.properties
     @Value("${spring.mail.username}")
     private String fromEmail;
 
     public void sendResetEmail(String toEmail, String resetLink) {
         SimpleMailMessage message = new SimpleMailMessage();
-
-        message.setFrom(fromEmail);   // ✅ FIXED: Gmail SMTP requires From to match authenticated account
+        message.setFrom(fromEmail);
         message.setTo(toEmail);
-        message.setSubject("Password Reset - My Chatbot");
-        message.setText("Hi,\n\n"
-                + "You requested a password reset for your Chatbot account.\n\n"
-                + "Click the link below to reset your password:\n"
-                + resetLink + "\n\n"
-                + "This link expires in 15 minutes.\n\n"
-                + "If you didn't request this, please ignore this email.\n\n"
-                + "- Chatbot Team");
-
+        message.setSubject("Password Reset - AI Chatbot");
+        message.setText(
+            "Hi,\n\n"
+            + "You requested a password reset.\n\n"
+            + "Click the link below (expires in 15 minutes):\n"
+            + resetLink + "\n\n"
+            + "If you didn't request this, please ignore this email.\n\n"
+            + "- AI Chatbot Team"
+        );
         mailSender.send(message);
+        log.info("Reset email sent to {}", toEmail);
     }
 }

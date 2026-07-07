@@ -1,10 +1,5 @@
 package com.chatbot.util;
 
-/**
- * Central validation helper.
- * Throws IllegalArgumentException (caught by GlobalExceptionHandler)
- * so controllers stay clean — no if/else chains needed.
- */
 public class Validator {
 
     public static void requireNonBlank(String value, String fieldName) {

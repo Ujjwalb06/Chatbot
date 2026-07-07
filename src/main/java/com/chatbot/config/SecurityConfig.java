@@ -1,7 +1,7 @@
 package com.chatbot.config;
 
 import com.chatbot.util.JwtFilter;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,10 +17,17 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@RequiredArgsConstructor  // constructor injection — no @Autowired fields
 public class SecurityConfig {
 
-    @Autowired
-    private JwtFilter jwtFilter;
+    private final JwtFilter jwtFilter;
+
+    private static final String[] PUBLIC_URLS = {
+        "/auth/**",
+        "/", "/index.html", "/login.html", "/register.html",
+        "/profile.html", "/users.html", "/forgot-password.html", "/reset-password.html",
+        "/assets/**", "/*.svg", "/*.png", "/*.ico"
+    };
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -29,9 +36,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/login.html", "/register.html", "/index.html", "/users.html", "/profile.html", "/forgot-password.html", "/reset-password.html", "/").permitAll()
-                .requestMatchers("/assets/**", "/*.svg", "/*.png", "/*.ico").permitAll()
+                .requestMatchers(PUBLIC_URLS).permitAll()
                 .requestMatchers("/api/users/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
