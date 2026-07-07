@@ -2,130 +2,259 @@ package com.chatbot.service;
 
 import com.chatbot.model.DocumentChunk;
 import com.chatbot.repository.DocumentChunkRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class RagService {
 
-    private final DocumentChunkRepository chunkRepository;
+    @Autowired
+    private DocumentChunkRepository documentChunkRepository;
 
-    private static final int CHUNK_SIZE = 500; // words per chunk
+    // ✅ Smaller chunks = more precise retrieval
+    private static final int CHUNK_SIZE    = 300;
+    // ✅ Overlap prevents losing context at chunk boundaries
+    private static final int CHUNK_OVERLAP = 50;
+    // Top N chunks to return as context
+    private static final int TOP_N         = 3;
 
-    @Transactional
+    // ✅ Stopwords — common words that add noise to TF-IDF scoring
+    private static final Set<String> STOPWORDS = new HashSet<>(Arrays.asList(
+        "the","is","are","was","were","be","been","being","have","has","had",
+        "do","does","did","will","would","could","should","may","might","shall",
+        "can","need","dare","used","ought","a","an","and","but","or","nor",
+        "for","yet","so","at","by","in","of","on","to","up","as","it",
+        "its","this","that","these","those","with","from","into","than","then",
+        "when","where","who","which","what","how","if","not","no","each",
+        "all","any","both","few","more","most","other","some","such","only",
+        "own","same","too","very","just","also","about","after","before","over",
+        "under","again","further","once","here","there","why","while"
+    ));
+
+    // =====================================================
+    // PUBLIC: PROCESS UPLOADED FILE
+    // =====================================================
     public int processDocument(MultipartFile file, Long sessionId) throws IOException {
         String filename = file.getOriginalFilename().toLowerCase();
-        String text;
+        String extractedText;
 
         if (filename.endsWith(".pdf")) {
-            text = extractFromPdf(file);
+            extractedText = extractTextFromPdf(file);
         } else if (filename.endsWith(".png") || filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
-            text = extractFromImage(file);
+            extractedText = extractTextFromImage(file);
         } else {
-            throw new IllegalArgumentException("Unsupported file type.");
+            throw new IllegalArgumentException("Only PDF, PNG, JPG files are supported.");
         }
 
-        if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException("No text could be extracted from this file.");
+        if (extractedText == null || extractedText.isBlank()) {
+            throw new IllegalArgumentException("Could not extract any content from this file.");
         }
 
-        text = text.replaceAll("\\s+", " ").trim();
+        extractedText = extractedText.replaceAll("\\s+", " ").trim();
 
-        // Clear old chunks for this session
-        chunkRepository.deleteBySessionId(sessionId);
+        // Delete old chunks
+        documentChunkRepository.deleteBySessionId(sessionId);
 
-        // Build all chunk objects
-        List<String> rawChunks = splitIntoChunks(text, CHUNK_SIZE);
-        List<DocumentChunk> chunks = new ArrayList<>();
-        for (int i = 0; i < rawChunks.size(); i++) {
-            chunks.add(new DocumentChunk(sessionId, rawChunks.get(i), i));
+        // ✅ Split with overlap and batch save
+        List<String> chunks = splitWithOverlap(extractedText, CHUNK_SIZE, CHUNK_OVERLAP);
+        List<DocumentChunk> chunkEntities = new ArrayList<>();
+        for (int i = 0; i < chunks.size(); i++) {
+            chunkEntities.add(new DocumentChunk(sessionId, chunks.get(i), i));
         }
+        documentChunkRepository.saveAll(chunkEntities); // single batch INSERT
 
-        // ✅ saveAll() = single batch INSERT instead of N individual saves
-        chunkRepository.saveAll(chunks);
-        log.info("RAG: {} chunks saved for session {}", chunks.size(), sessionId);
+        System.out.println("=== RAG: Saved " + chunks.size() + " chunks for session " + sessionId + " ===");
         return chunks.size();
     }
 
+    // =====================================================
+    // PUBLIC: RETRIEVE RELEVANT CONTEXT USING TF-IDF
+    // =====================================================
     public String retrieveRelevantContext(Long sessionId, String question) {
-        List<DocumentChunk> allChunks = chunkRepository.findBySessionIdOrderByChunkIndexAsc(sessionId);
+        List<DocumentChunk> allChunks = documentChunkRepository
+                .findBySessionIdOrderByChunkIndexAsc(sessionId);
+
         if (allChunks.isEmpty()) return null;
 
-        String[] keywords = question.toLowerCase()
-                .replaceAll("[^a-z0-9 ]", "")
-                .split("\\s+");
-
-        // Score each chunk by keyword frequency
-        record ScoredChunk(String content, int score) {}
-
-        List<ScoredChunk> scored = allChunks.stream().map(chunk -> {
-            String lower = chunk.getContent().toLowerCase();
-            int score = 0;
-            for (String word : keywords) {
-                if (word.length() > 3 && lower.contains(word)) score++;
-            }
-            return new ScoredChunk(chunk.getContent(), score);
-        }).sorted((a, b) -> b.score() - a.score()).toList();
-
-        StringBuilder context = new StringBuilder();
-        int topN = Math.min(3, scored.size());
-        for (int i = 0; i < topN; i++) {
-            if (scored.get(i).score() > 0) context.append(scored.get(i).content()).append("\n\n");
+        // Image session fallback — return first chunk directly
+        if (allChunks.get(0).getContent().startsWith("IMAGE_UPLOADED:")) {
+            return allChunks.get(0).getContent();
         }
 
-        // Fallback: return first chunk even if no keyword match (e.g. image metadata)
-        if (context.isEmpty()) context.append(allChunks.get(0).getContent());
+        // ✅ Tokenize and clean the question
+        List<String> queryTerms = tokenize(question);
+        if (queryTerms.isEmpty()) return null;
 
+        // ✅ Compute IDF for each query term across all chunks
+        Map<String, Double> idfMap = computeIdf(queryTerms, allChunks);
+
+        // ✅ Score each chunk using TF-IDF
+        List<ScoredChunk> scored = new ArrayList<>();
+        for (DocumentChunk chunk : allChunks) {
+            double score = computeTfIdfScore(chunk.getContent(), queryTerms, idfMap);
+            if (score > 0) scored.add(new ScoredChunk(chunk.getContent(), score));
+        }
+
+        if (scored.isEmpty()) {
+            // Fallback: return first chunk if no TF-IDF match at all
+            return allChunks.get(0).getContent();
+        }
+
+        // Sort by score descending, take top N
+        scored.sort((a, b) -> Double.compare(b.score, a.score));
+
+        StringBuilder context = new StringBuilder();
+        int limit = Math.min(TOP_N, scored.size());
+        for (int i = 0; i < limit; i++) {
+            context.append(scored.get(i).content).append("\n\n");
+        }
+
+        System.out.println("=== RAG: TF-IDF selected " + limit + " chunks for session " + sessionId + " ===");
         return context.toString().trim();
     }
 
-    // ===== PRIVATE HELPERS =====
+    // =====================================================
+    // PRIVATE: TF-IDF COMPUTATION
+    // =====================================================
 
-    private String extractFromPdf(MultipartFile file) throws IOException {
+    /**
+     * Compute IDF (Inverse Document Frequency) for each query term.
+     * IDF = log( totalChunks / chunksContainingTerm )
+     * Rare words get high IDF; common words get low IDF.
+     */
+    private Map<String, Double> computeIdf(List<String> queryTerms, List<DocumentChunk> chunks) {
+        Map<String, Double> idf = new HashMap<>();
+        int totalChunks = chunks.size();
+
+        for (String term : queryTerms) {
+            long chunksWithTerm = chunks.stream()
+                    .filter(c -> c.getContent().toLowerCase().contains(term))
+                    .count();
+
+            if (chunksWithTerm > 0) {
+                // +1 smoothing to avoid division by zero
+                idf.put(term, Math.log((double) totalChunks / (chunksWithTerm + 1)) + 1);
+            } else {
+                idf.put(term, 0.0);
+            }
+        }
+        return idf;
+    }
+
+    /**
+     * Compute TF-IDF score for a single chunk against the query terms.
+     * TF = (occurrences of term in chunk) / (total words in chunk)
+     * Score = sum of TF * IDF for all query terms
+     */
+    private double computeTfIdfScore(String chunkContent, List<String> queryTerms, Map<String, Double> idfMap) {
+        List<String> chunkTokens = tokenize(chunkContent);
+        if (chunkTokens.isEmpty()) return 0.0;
+
+        // Count frequency of each token in this chunk
+        Map<String, Long> termFreq = chunkTokens.stream()
+                .collect(Collectors.groupingBy(t -> t, Collectors.counting()));
+
+        double score = 0.0;
+        for (String term : queryTerms) {
+            long freq = termFreq.getOrDefault(term, 0L);
+            if (freq > 0) {
+                // TF = frequency / total tokens in chunk
+                double tf = (double) freq / chunkTokens.size();
+                double idf = idfMap.getOrDefault(term, 0.0);
+                score += tf * idf;
+            }
+        }
+        return score;
+    }
+
+    // =====================================================
+    // PRIVATE: TOKENIZATION
+    // =====================================================
+
+    /**
+     * Tokenize text: lowercase, remove punctuation, remove stopwords,
+     * keep only words with length >= 3.
+     */
+    private List<String> tokenize(String text) {
+        return Arrays.stream(
+                text.toLowerCase()
+                    .replaceAll("[^a-z0-9\\s]", " ")
+                    .split("\\s+")
+                )
+                .filter(w -> w.length() >= 3)
+                .filter(w -> !STOPWORDS.contains(w))
+                .collect(Collectors.toList());
+    }
+
+    // =====================================================
+    // PRIVATE: CHUNKING WITH OVERLAP
+    // =====================================================
+
+    /**
+     * Split text into overlapping chunks.
+     * Overlap prevents losing context at chunk boundaries.
+     * Example: chunk1 = words 0-299, chunk2 = words 250-549, etc.
+     */
+    private List<String> splitWithOverlap(String text, int chunkSize, int overlap) {
+        String[] words = text.split("\\s+");
+        List<String> chunks = new ArrayList<>();
+        int step = chunkSize - overlap;
+
+        for (int i = 0; i < words.length; i += step) {
+            int end = Math.min(i + chunkSize, words.length);
+            StringBuilder chunk = new StringBuilder();
+            for (int j = i; j < end; j++) {
+                chunk.append(words[j]).append(" ");
+            }
+            chunks.add(chunk.toString().trim());
+            if (end == words.length) break;
+        }
+        return chunks;
+    }
+
+    // =====================================================
+    // PRIVATE: FILE EXTRACTION
+    // =====================================================
+
+    private String extractTextFromPdf(MultipartFile file) throws IOException {
         byte[] bytes = file.getBytes();
-        try (PDDocument doc = Loader.loadPDF(bytes)) {
-            return new PDFTextStripper().getText(doc);
+        try (PDDocument document = Loader.loadPDF(bytes)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            return stripper.getText(document);
         }
     }
 
-    private String extractFromImage(MultipartFile file) throws IOException {
+    private String extractTextFromImage(MultipartFile file) throws IOException {
         BufferedImage img = ImageIO.read(file.getInputStream());
-        if (img == null) throw new IllegalArgumentException("Could not read image. Try a different file.");
-
+        if (img == null) {
+            throw new IllegalArgumentException("Could not read image file. Please try a different image.");
+        }
         return "IMAGE_UPLOADED: " + file.getOriginalFilename()
              + " | Dimensions: " + img.getWidth() + "x" + img.getHeight() + "px"
              + " | Size: " + (file.getSize() / 1024) + "KB"
              + " | This session has an uploaded image. Describe it in detail when asked.";
     }
 
-    private List<String> splitIntoChunks(String text, int size) {
-        String[] words = text.split("\\s+");
-        List<String> chunks = new ArrayList<>();
-        StringBuilder chunk = new StringBuilder();
-        int count = 0;
-        for (String word : words) {
-            chunk.append(word).append(" ");
-            if (++count >= size) {
-                chunks.add(chunk.toString().trim());
-                chunk = new StringBuilder();
-                count = 0;
-            }
+    // =====================================================
+    // PRIVATE: HELPER CLASS
+    // =====================================================
+
+    private static class ScoredChunk {
+        String content;
+        double score;
+        ScoredChunk(String content, double score) {
+            this.content = content;
+            this.score   = score;
         }
-        if (!chunk.isEmpty()) chunks.add(chunk.toString().trim());
-        return chunks;
     }
 }
