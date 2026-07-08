@@ -22,16 +22,20 @@ public class GrokService {
     @Value("${groq.api.key}")
     private String apiKey;
 
-    // ✅ Singleton HttpClient — created once, reused on every request
+    // Singleton HttpClient — created once, reused on every request
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String MODEL    = "llama-3.3-70b-versatile";
 
-    public String qa(List<Map<String, String>> messages) throws Exception {
+    // ✅ NEW — wrapper record that holds both the answer AND tokens used
+    public record GrokResponse(String answer, int tokensUsed) {}
+
+    // ✅ Return type changed from String to GrokResponse
+    public GrokResponse qa(List<Map<String, String>> messages) throws Exception {
         JSONArray messagesArray = new JSONArray();
 
-        // System prompt — LocalDate.now() called ONCE and stored
+        // System prompt — LocalDate called once and stored
         LocalDate today = LocalDate.now();
         messagesArray.put(new JSONObject()
                 .put("role", "system")
@@ -57,17 +61,19 @@ public class GrokService {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                 .build();
 
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        HttpResponse<byte[]> response = httpClient.send(
+                request, HttpResponse.BodyHandlers.ofByteArray());
         String responseBody = new String(response.body(), StandardCharsets.UTF_8);
 
         JSONObject obj = new JSONObject(responseBody);
 
         if (!obj.has("choices")) {
             log.error("Groq API returned no choices: {}", responseBody);
-            return "Sorry, I couldn't process that. Please try again.";
+            // ✅ Return 0 tokens on error so user isn't penalized for API failures
+            return new GrokResponse("Sorry, I couldn't process that. Please try again.", 0);
         }
 
-        return obj.getJSONArray("choices")
+        String answer = obj.getJSONArray("choices")
                 .getJSONObject(0)
                 .getJSONObject("message")
                 .getString("content")
@@ -75,5 +81,14 @@ public class GrokService {
                 .replace("\u2011", "-")
                 .replace("\uFFFD", "")
                 .trim();
+
+        // ✅ Extract actual tokens used from Groq's usage field
+        int tokensUsed = 0;
+        if (obj.has("usage")) {
+            tokensUsed = obj.getJSONObject("usage").optInt("total_tokens", 0);
+            log.info("Groq tokens used: {}", tokensUsed);
+        }
+
+        return new GrokResponse(answer, tokensUsed);
     }
 }

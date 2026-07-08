@@ -38,9 +38,18 @@ public class User {
     @Column
     private Long resetTokenExpiry;
 
+    // ✅ NEW — token tracking fields
+    @Column(nullable = false)
+    private int tokensUsed = 0;      // tokens consumed in current window
+
+    @Column
+    private Long tokenResetTime;     // epoch millis — when token window resets
+
     public User(String name, String email, String username, String password) {
-        this.name = name; this.email = email;
-        this.username = username; this.password = password;
-        this.role = "USER";
+        this.name     = name;
+        this.email    = email;
+        this.username = username;
+        this.password = password;
+        this.role     = "USER";
     }
 }
