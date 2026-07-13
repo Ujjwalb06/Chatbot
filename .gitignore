@@ -4,14 +4,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-# ✅ SECRETS — never commit these
-src/main/resources/application.properties
-application.properties
+# ✅ application.properties now uses placeholders — safe to commit
+# (only .env files hold real secrets now)
 *.env
 .env
-
-# ✅ Template for teammates — commit this instead of real properties
-# (rename application.properties.example and fill in real values locally)
 
 ### IntelliJ IDEA ###
 .idea/
