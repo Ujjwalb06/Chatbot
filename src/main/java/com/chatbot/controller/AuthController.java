@@ -32,7 +32,7 @@ public class AuthController {
         // ✅ Returns flat response — same format frontend already expects
         // { success, token, username, name, role }
         LoginResponse data = authService.login(req);
-
+        String datoken=data.getToken();
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("token", data.getToken());

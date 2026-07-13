@@ -16,7 +16,7 @@ public class TokenService {
 
     private final UserRepository userRepository;
 
-    private static final int  TOKEN_LIMIT    = 100000;           // max tokens per window
+    private static final int  TOKEN_LIMIT    = 50000;           // max tokens per window
     private static final long WINDOW_MS      = 60 * 60 * 1000; // 1 hour in milliseconds
 
     // =====================================================
