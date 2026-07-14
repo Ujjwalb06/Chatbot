@@ -16,6 +16,7 @@ function App() {
   const [ragActive, setRagActive] = useState(false);
   const [ragFileName, setRagFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const chatboxRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -220,7 +221,8 @@ function App() {
       <div className="bgGlow glowOne"></div>
       <div className="bgGlow glowTwo"></div>
       <div className="layout">
-        <motion.div className="sidebar" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+        <motion.div className={`sidebar ${sidebarOpen ? "sidebarOpen" : ""}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <button className="closeSidebarBtn" onClick={() => setSidebarOpen(false)}>✕</button>
           <button className="newChatBtn" onClick={createNewChat}>+ New Chat</button>
           <div className="sessionList">
             <AnimatePresence>
@@ -247,9 +249,12 @@ function App() {
           </div>
         </motion.div>
 
+        {sidebarOpen && <div className="sidebarOverlay" onClick={() => setSidebarOpen(false)}></div>}
+
         <div className="app">
           <motion.div className="header" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
             <div className="brand">
+              <button className="menuBtn" onClick={() => setSidebarOpen(true)}>☰</button>
               <div className="logo">AI</div>
               <div><h2>Assistant</h2><span className="username">Signed in as {username}</span></div>
             </div>
@@ -305,7 +310,7 @@ function App() {
             </AnimatePresence>
           </div>
 
-          <motion.div className="inputBox" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+          <motion.div className="inputBox">
             <input type="file" accept=".pdf,.png,.jpg,.jpeg" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileChange} />
             <button className={`attachBtn ${ragActive ? "attachActive" : ""}`} onClick={handleAttachClick}
               disabled={isUploading} title={ragActive ? "Document uploaded — click to replace" : "Upload a PDF document"}>
